@@ -1,0 +1,30 @@
+1 ICON "@ASSETS@/destello.ico"
+1 24 "@ASSETS@/destello.manifest"
+
+1 VERSIONINFO
+ FILEVERSION @VER_COMMA@
+ PRODUCTVERSION @VER_COMMA@
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS 0x40004L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "0C0A04B0"
+        BEGIN
+            VALUE "CompanyName", "Destello"
+            VALUE "FileDescription", "Destello - capturador de pantalla"
+            VALUE "FileVersion", "@VER_DOT@"
+            VALUE "InternalName", "destello"
+            VALUE "OriginalFilename", "destello.exe"
+            VALUE "ProductName", "Destello"
+            VALUE "ProductVersion", "@VER_DOT@"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0C0A, 1200
+    END
+END
