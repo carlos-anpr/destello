@@ -1,0 +1,96 @@
+# Pipeline de release de Destello: compila para Windows x64 y adjunta los binarios a la GitHub Release.
+# El CI de cada PR lo hace el pipeline central (agentic-ci.yml, carlos-anpr/platform-pipeline).
+#
+# Se dispara al PUBLICAR una release, la cree release-please (job "release" del pipeline central)
+# o un administrador con `gh release create vX.Y.Z`. Con workflow_dispatch se vuelve a generar
+# la de una etiqueta existente.
+name: Release Windows
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Etiqueta de una release existente (vX.Y.Z)
+        required: true
+        type: string
+permissions: {}
+concurrency:
+  group: release-windows-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+jobs:
+  windows:
+    name: build windows-x64
+    runs-on: windows-2025
+    timeout-minutes: 40
+    permissions:
+      contents: write   # adjuntar los binarios a la release
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - name: Etiqueta válida
+        shell: pwsh
+        run: |
+          if ($env:TAG -notmatch '^v\d+\.\d+\.\d+$') { throw "Etiqueta no válida: '$env:TAG' (se espera vX.Y.Z)" }
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: refs/tags/${{ env.TAG }}
+
+      - name: La etiqueta coincide con la versión de Cargo.toml
+        shell: pwsh
+        run: |
+          $m = Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1
+          $version = $m.Matches[0].Groups[1].Value
+          if ("v$version" -ne $env:TAG) { throw "Cargo.toml dice $version y la etiqueta es $env:TAG" }
+          "Versión $version"
+
+      - name: Toolchain de Rust
+        shell: pwsh
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy
+          rustup default stable
+          rustc --version; cargo --version
+
+      - name: Lint y tests
+        shell: pwsh
+        run: |
+          cargo clippy --locked --release --all-targets -- -D warnings
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cargo test --locked --release
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Compilar destello.exe
+        shell: pwsh
+        run: |
+          cargo build --locked --release
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $exe = Get-Item target/release/destello.exe
+          $info = $exe.VersionInfo
+          "destello.exe: $([math]::Round($exe.Length / 1KB)) KB, versión del recurso $($info.ProductVersion)"
+          if ($info.ProductVersion -ne "$($env:TAG.TrimStart('v')).0") { throw "La versión del .exe ($($info.ProductVersion)) no coincide con $env:TAG" }
+
+      - name: Empaquetar
+        shell: pwsh
+        run: |
+          $name = "Destello-$env:TAG-windows-x64"
+          $stage = "dist/$name"
+          New-Item -ItemType Directory -Force $stage | Out-Null
+          Copy-Item target/release/destello.exe, installer/install.ps1, installer/uninstall.ps1, installer/Instalar.cmd, README.md $stage
+          Compress-Archive -Path "$stage/*" -DestinationPath "dist/$name.zip" -CompressionLevel Optimal
+          Copy-Item target/release/destello.exe "dist/destello-$env:TAG-windows-x64.exe"
+          Push-Location dist
+          Get-ChildItem -File | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.Name -Algorithm SHA256).Hash.ToLower(), $_.Name } |
+            Set-Content -Encoding ascii SHA256SUMS.txt
+          Get-Content SHA256SUMS.txt
+          Pop-Location
+
+      - name: Adjuntar a la release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $files = Get-ChildItem dist -File | ForEach-Object { $_.FullName }
+          gh release upload $env:TAG @files --clobber --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }

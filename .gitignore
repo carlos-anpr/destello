@@ -1,0 +1,21 @@
+/target
+
+# Credenciales y secretos (nunca versionar)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.log
+
+# Material local de QA y notas internas: contienen capturas reales del escritorio
+/qa/
+/SPEC.md
+/QA.md
+/VISUAL.md
+/CAMBIOS-v2.md
+/dist/
+*.png
+!/assets/*.png
