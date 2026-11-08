@@ -1,6 +1,21 @@
-# Destello
+<p align="center">
+  <img src="assets/destello-256.png" width="96" alt="Icono de Destello">
+</p>
 
-Capturador de pantalla para Windows, rápido y sin distracciones: seleccionas un área, la anotas y la copias. **Ctrl+V en una carpeta del Explorador crea el archivo PNG**, como en Linux.
+<h1 align="center">Destello</h1>
+
+<p align="center">
+  Capturador de pantalla para Windows, rápido y sin distracciones: seleccionas un área, la anotas y la copias.<br>
+  <b>Ctrl+V en una carpeta del Explorador crea el archivo PNG</b>, como en Linux.
+</p>
+
+<p align="center">
+  <a href="../../releases/latest"><img alt="Última versión" src="https://img.shields.io/github/v/release/carlos-anpr/destello?label=descargar&color=5b5bf0"></a>
+  <img alt="Windows 10/11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078d4">
+  <img alt="Rust" src="https://img.shields.io/badge/Rust-Win32%20%2B%20Direct2D-b7410e">
+</p>
+
+![Destello: área seleccionada con rectángulo, flecha, texto, contadores y correos pixelados, y la barra de herramientas debajo](docs/captura.png)
 
 Escrito en Rust sobre Win32, Direct2D y DirectWrite. Un único `.exe` de ~1,4 MB, sin dependencias, con instalador que no pide administrador.
 

@@ -19,3 +19,4 @@
 /dist/
 *.png
 !/assets/*.png
+!/docs/*.png
