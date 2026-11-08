@@ -1,0 +1,138 @@
+# Pipeline de release de Destello: compila para Windows x64, genera el instalador
+# Destello_X.Y.Z_x64-setup.exe (Inno Setup) y lo publica en la GitHub Release.
+# El CI de cada PR lo hace el pipeline central (agentic-ci.yml, carlos-anpr/platform-pipeline).
+#
+# Se dispara al subir una etiqueta vX.Y.Z (git tag v1.2.3 && git push origin v1.2.3), al
+# publicar una release (p. ej. con release-please) o a mano con workflow_dispatch. Si la release
+# no existe la crea; si ya existe, sustituye sus binarios.
+name: Release Windows
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Etiqueta existente (vX.Y.Z)
+        required: true
+        type: string
+permissions: {}
+concurrency:
+  group: release-windows-${{ inputs.tag || github.event.release.tag_name || github.ref_name }}
+  cancel-in-progress: false
+jobs:
+  windows:
+    name: build windows-x64
+    runs-on: windows-2025
+    timeout-minutes: 40
+    permissions:
+      contents: write   # crear la release y adjuntar el instalador
+    env:
+      TAG: ${{ inputs.tag || github.event.release.tag_name || github.ref_name }}
+    steps:
+      - name: Etiqueta válida
+        shell: pwsh
+        run: |
+          if ($env:TAG -notmatch '^v\d+\.\d+\.\d+$') { throw "Etiqueta no válida: '$env:TAG' (se espera vX.Y.Z)" }
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: refs/tags/${{ env.TAG }}
+
+      - name: La etiqueta coincide con la versión de Cargo.toml
+        shell: pwsh
+        run: |
+          $m = Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1
+          $version = $m.Matches[0].Groups[1].Value
+          if ("v$version" -ne $env:TAG) { throw "Cargo.toml dice $version y la etiqueta es $env:TAG" }
+          "VERSION=$version" >> $env:GITHUB_ENV
+
+      - name: Toolchain de Rust
+        shell: pwsh
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy
+          rustup default stable
+          rustc --version; cargo --version
+
+      - name: Lint y tests
+        shell: pwsh
+        run: |
+          cargo clippy --locked --release --all-targets -- -D warnings
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cargo test --locked --release
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Compilar destello.exe
+        shell: pwsh
+        run: |
+          cargo build --locked --release
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $info = (Get-Item target/release/destello.exe).VersionInfo
+          if ($info.ProductVersion -ne "$env:VERSION.0") { throw "La versión del .exe ($($info.ProductVersion)) no coincide con $env:TAG" }
+
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --version=6.5.4 --no-progress -y
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
+          if (-not (Test-Path $iscc)) { throw 'No se encuentra ISCC.exe' }
+          "ISCC=$iscc" >> $env:GITHUB_ENV
+
+      - name: Generar el instalador
+        shell: pwsh
+        run: |
+          & $env:ISCC /Q "/DAppVersion=$env:VERSION" installer/destello.iss
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $setup = Get-Item "dist/Destello_$($env:VERSION)_x64-setup.exe"
+          "$($setup.Name): $([math]::Round($setup.Length / 1MB, 1)) MB"
+
+      - name: Instalar y desinstalar en limpio
+        shell: pwsh
+        run: |
+          $setup = (Get-Item "dist/Destello_$($env:VERSION)_x64-setup.exe").FullName
+          $p = Start-Process $setup -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -PassThru -Wait
+          if ($p.ExitCode) { throw "El instalador terminó con $($p.ExitCode)" }
+          $dir = "$env:LOCALAPPDATA\Programs\Destello"
+          $exe = Get-Item "$dir\destello.exe"
+          if ($exe.VersionInfo.ProductVersion -ne "$env:VERSION.0") { throw 'Versión instalada incorrecta' }
+          if (-not (Test-Path (Join-Path ([Environment]::GetFolderPath('Programs')) 'Destello.lnk'))) { throw 'Falta el acceso directo' }
+          # unins000.exe se relanza desde %TEMP% y el proceso original sale enseguida: se espera a la carpeta
+          Start-Process "$dir\unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait
+          for ($i = 0; $i -lt 60 -and (Test-Path $dir); $i++) { Start-Sleep -Milliseconds 500 }
+          if (Test-Path $dir) { throw "La desinstalación dejó $dir" }
+          'Instalación y desinstalación OK'
+
+      - name: Checksums
+        shell: pwsh
+        run: |
+          Push-Location dist
+          Get-ChildItem -File *.exe | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.Name -Algorithm SHA256).Hash.ToLower(), $_.Name } |
+            Set-Content -Encoding ascii SHA256SUMS.txt
+          Get-Content SHA256SUMS.txt
+          Pop-Location
+
+      - name: Publicar en la release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $notes = @"
+          ## Descarga
+
+          **Windows 10/11 x64**: ``Destello_$($env:VERSION)_x64-setup.exe``. Instala solo para tu usuario, sin pedir administrador, y se desinstala desde *Configuración → Aplicaciones instaladas*.
+
+          El instalador no está firmado: Windows SmartScreen puede avisar la primera vez (*Más información → Ejecutar de todas formas*). ``SHA256SUMS.txt`` sirve para comprobar la descarga.
+          "@
+          gh release view $env:TAG --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE) {
+            gh release create $env:TAG --repo $env:GITHUB_REPOSITORY --title "Destello $env:TAG" --notes $notes --verify-tag
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
+          $files = Get-ChildItem dist -File | ForEach-Object { $_.FullName }
+          gh release upload $env:TAG @files --clobber --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
