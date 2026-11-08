@@ -2,18 +2,15 @@
 
 Capturador de pantalla para Windows, rápido y sin distracciones: seleccionas un área, la anotas y la copias. **Ctrl+V en una carpeta del Explorador crea el archivo PNG**, como en Linux.
 
-Escrito en Rust sobre Win32, Direct2D y DirectWrite. Un único `.exe` de ~1,3 MB, sin dependencias ni instalador con administrador.
+Escrito en Rust sobre Win32, Direct2D y DirectWrite. Un único `.exe` de ~1,4 MB, sin dependencias, con instalador que no pide administrador.
 
 ## Descargar e instalar
 
-1. Descarga `Destello-vX.Y.Z-windows-x64.zip` de la [última release](../../releases/latest).
-2. Extrae el ZIP y haz doble clic en **`Instalar.cmd`**.
+Descarga **`Destello_X.Y.Z_x64-setup.exe`** de la [última release](../../releases/latest) y ábrelo.
 
-Se instala solo para tu usuario en `%LOCALAPPDATA%\Programs\Destello`, con acceso directo en el menú Inicio, arranque con Windows, el comando `destello` en el PATH y una entrada en *Configuración → Aplicaciones instaladas*, desde donde se desinstala.
+Se instala solo para tu usuario, sin pedir administrador, en `%LOCALAPPDATA%\Programs\Destello`. Crea un acceso directo en el menú Inicio y, si lo dejas marcado, añade el arranque con Windows y el comando `destello` en el PATH. Se desinstala desde *Configuración → Aplicaciones instaladas*. Para actualizar, basta con instalar la versión nueva encima.
 
-Si prefieres no instalar nada, la release incluye también el `.exe` suelto: ejecútalo y aparece en la bandeja del sistema.
-
-> El ejecutable no está firmado: la primera vez Windows SmartScreen puede avisar. Pulsa *Más información → Ejecutar de todas formas*. Cada release publica `SHA256SUMS.txt` para comprobar la descarga.
+> El instalador no está firmado: la primera vez Windows SmartScreen puede avisar. Pulsa *Más información → Ejecutar de todas formas*. Cada release publica `SHA256SUMS.txt` para comprobar la descarga.
 
 ## Uso
 
@@ -52,12 +49,13 @@ destello --version | --help
 
 ## Compilar desde el código
 
-Requisitos: Windows 10/11 x64, [Rust](https://rustup.rs) estable y las *Build Tools* de Visual Studio (MSVC y Windows SDK).
+Requisitos: Windows 10/11 x64, [Rust](https://rustup.rs) estable, las *Build Tools* de Visual Studio (MSVC y Windows SDK) y, para el instalador, [Inno Setup 6](https://jrsoftware.org/isinfo.php).
 
 ```powershell
 cargo test
 cargo build --release
-powershell -ExecutionPolicy Bypass -File installer\install.ps1   # instala el binario recién compilado
+# Instalador (requiere Inno Setup 6): genera dist\Destello_1.0.0_x64-setup.exe
+& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=1.0.0 installer\destello.iss
 ```
 
 ## CI/CD
@@ -68,4 +66,10 @@ powershell -ExecutionPolicy Bypass -File installer\install.ps1   # instala el bi
   - **Tests:** en Windows.
   - **Guardarraíles y procedencia.**
   - **Seguridad:** gitleaks, Semgrep, OSV-Scanner y zizmor.
-- **Cada release publicada** (`vX.Y.Z`) lanza [`release.yml`](.github/workflows/release.yml): compila en Windows, repite lint y tests, comprueba que la versión del `.exe` coincide con la etiqueta, y adjunta el ZIP, el `.exe` y `SHA256SUMS.txt`.
+- **Cada etiqueta `vX.Y.Z`** lanza [`release.yml`](.github/workflows/release.yml):
+  1. Comprueba que la etiqueta coincide con `Cargo.toml`.
+  2. Repite clippy y los tests, y compila.
+  3. Genera el instalador y lo prueba (instala y desinstala en limpio).
+  4. Publica la release con el instalador y `SHA256SUMS.txt`.
+
+  Para sacar una versión: sube `version` en `Cargo.toml` en un PR y, cuando esté en `main`, ejecuta `git tag vX.Y.Z && git push origin vX.Y.Z`.
