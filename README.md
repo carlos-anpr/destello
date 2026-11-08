@@ -10,9 +10,9 @@
 </p>
 
 <p align="center">
-  <a href="../../releases/latest"><img alt="Última versión" src="https://img.shields.io/github/v/release/carlos-anpr/destello?label=descargar&color=5b5bf0"></a>
-  <img alt="Windows 10/11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078d4">
-  <img alt="Rust" src="https://img.shields.io/badge/Rust-Win32%20%2B%20Direct2D-b7410e">
+  <a href="../../releases/latest"><img alt="Descargar la última versión" src="docs/badges/descargar.svg"></a>
+  <img alt="Windows 10 | 11" src="docs/badges/windows.svg">
+  <img alt="Rust: Win32 + Direct2D" src="docs/badges/rust.svg">
 </p>
 
 ![Destello: área seleccionada con rectángulo, flecha, texto, contadores y correos pixelados, y la barra de herramientas debajo](docs/captura.png)
